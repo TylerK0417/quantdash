@@ -11,6 +11,9 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 
+# Import the shared MA logic under a private name
+from src.signals import compute_signals as _compute_signals
+
 # Where our Parquet lives
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
@@ -26,25 +29,33 @@ def load_data(symbol: str) -> pd.DataFrame:
     return df
 
 
-def compute_signals(df: pd.DataFrame, short: int, long: int) -> pd.DataFrame:
+def compute_signals(
+    df: pd.DataFrame,
+    short: int,
+    long: int
+) -> pd.DataFrame:
     """
-    Compute short & long moving averages, then generate:
-      - signal: 1 when ma_short > ma_long else 0
-      - position: signal.diff() to mark entries/exits
+    Wrapper around src.signals.compute_signals that accepts
+    the keywords 'short' and 'long' to match test expectations.
+
+    Returns a DataFrame with columns:
+      - ma_short, ma_long, signal, position
     """
-    df = df.copy()
-    df["ma_short"] = df["close"].rolling(short).mean()
-    df["ma_long"] = df["close"].rolling(long).mean()
-    df["signal"] = (df["ma_short"] > df["ma_long"]).astype(int)
-    df["position"] = df["signal"].diff().fillna(0)
-    return df
+    # Delegate to the real implementation
+    sig = _compute_signals(df, short_window=short, long_window=long)
+
+    # Ensure we have 'position' too (diff of signal)
+    if "position" not in sig.columns:
+        sig["position"] = sig["signal"].diff().fillna(0).astype(int)
+
+    return sig
 
 
 def backtest(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Walk through the 'position' column:
+    Walk through 'position':
       - entry when position == 1
-      - exit when position == -1
+      - exit  when position == -1
     Record each trade's entry_date, exit_date, prices, and pct_return.
     """
     trades = []
@@ -65,27 +76,25 @@ def backtest(df: pd.DataFrame) -> pd.DataFrame:
             exit_price = price
             exit_date = date
             pct_ret = (exit_price / entry_price) - 1
-            trades.append(
-                {
-                    "entry_date": entry_date,
-                    "exit_date": exit_date,
-                    "entry_price": entry_price,
-                    "exit_price": exit_price,
-                    "pct_return": pct_ret,
-                }
-            )
-            entry_price = None  # reset for next trade
+            trades.append({
+                "entry_date":  entry_date,
+                "exit_date":   exit_date,
+                "entry_price": entry_price,
+                "exit_price":  exit_price,
+                "pct_return":  pct_ret,
+            })
+            entry_price = None  # reset
 
     return pd.DataFrame(trades)
 
 
 def main():
-    load_dotenv()  # pick up ALPACA_API_KEY if needed for extended logic
+    load_dotenv()  # pick up ALPACA keys if you extend this
 
     p = argparse.ArgumentParser()
     p.add_argument("--symbol", required=True, help="Ticker, e.g. SPY")
-    p.add_argument("--short", type=int, default=10, help="Short MA window")
-    p.add_argument("--long", type=int, default=50, help="Long MA window")
+    p.add_argument("--short",  type=int, default=10, help="Short MA window")
+    p.add_argument("--long",   type=int, default=50, help="Long MA window")
     args = p.parse_args()
 
     # 1) Load & signal
