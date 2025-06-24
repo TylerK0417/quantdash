@@ -1,20 +1,23 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
 
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
 
-    # ← Add this section:
+    # expose your Alpaca keys to the runner
     env:
-      ALPACA_API_KEY:   ${{ secrets.ALPACA_API_KEY }}
-      ALPACA_API_SECRET:${{ secrets.ALPACA_API_SECRET }}
+      ALPACA_API_KEY:    ${{ secrets.ALPACA_API_KEY }}
+      ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
@@ -22,10 +25,17 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install black pytest alpaca-py python-dotenv pyarrow
+          pip install \
+            black \
+            pytest \
+            alpaca-py \
+            python-dotenv \
+            pyarrow
 
       - name: Run black (check only)
-        run: black --check .
+        run: |
+          black --check .
 
       - name: Run tests
-        run: pytest -q
+        run: |
+          pytest -q
