@@ -1,5 +1,5 @@
 .env
-# -------- data ---------
-/data/*
-!*/.keep                # optional sentinel so folder exists in repo
-
+# -------- data (keep empty folder structure) --------
+/data/**         # ignore everything under data recursively
+!/data/**/.keep  # but allow any .keep sentinel anywhere inside /data
+!/data/.keep     # (and one directly inside /data, if you ever add it)
