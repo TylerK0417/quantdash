@@ -1,5 +1,9 @@
+# 1) Keep API keys out of Git
 .env
-# -------- data (keep empty folder structure) --------
-/data/**         # ignore everything under data recursively
-!/data/**/.keep  # but allow any .keep sentinel anywhere inside /data
-!/data/.keep     # (and one directly inside /data, if you ever add it)
+
+# 2) Data folder: ignore everything under data/…
+/data/**
+
+# …except our “.keep” sentinel files so the empty directories stay in the repo
+!/data/**/.keep
+!/data/.keep
