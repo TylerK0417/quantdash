@@ -1,6 +1,10 @@
 # keep API keys out
 .env
 
-# -------- data ---------
+# ignore everything directly under data/
+# (e.g. data/raw/, data/otherfolder/, data/foo.csv)
 /data/*
-!*/.keep                # optional sentinel so folder exists in repo
+
+# but keep the raw/ folder itself and its .keep file
+!/data/raw/
+!/data/raw/.keep
