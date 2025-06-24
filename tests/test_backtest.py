@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 from src.backtest import compute_signals, backtest
 
+
 def make_df(prices):
     """
     Helper: generate a DataFrame of daily closes from a list of prices,
@@ -9,6 +10,7 @@ def make_df(prices):
     """
     dates = pd.date_range("2025-01-01", periods=len(prices), freq="D")
     return pd.DataFrame({"close": prices}, index=dates)
+
 
 def test_compute_signals_columns_and_values():
     # Given a simple price sequence that rises then falls,
@@ -23,12 +25,13 @@ def test_compute_signals_columns_and_values():
 
     # On the 3rd row (index 2), ma_short=(2+3)/2=2.5, ma_long=(1+2+3)/3=2.0 → signal 1
     assert pytest.approx(sig["ma_short"].iloc[2], rel=1e-6) == 2.5
-    assert pytest.approx(sig["ma_long"].iloc[2], rel=1e-6)  == 2.0
+    assert pytest.approx(sig["ma_long"].iloc[2], rel=1e-6) == 2.0
     assert sig["signal"].iloc[2] == 1
 
     # On the last row, price falls so signal → 0 and position diff → -1
     assert sig["signal"].iloc[-1] == 0
     assert sig["position"].iloc[-1] == -1
+
 
 def test_backtest_single_trade():
     # Using the same price pattern, backtest() should produce exactly one trade:
@@ -45,10 +48,10 @@ def test_backtest_single_trade():
     trade = trades.iloc[0]
     # Check entry/exit dates and prices
     assert trade["entry_date"] == df.index[2]
-    assert trade["exit_date"]  == df.index[-1]
+    assert trade["exit_date"] == df.index[-1]
     assert trade["entry_price"] == 3
-    assert trade["exit_price"]  == 1
+    assert trade["exit_price"] == 1
 
     # Percent return = (1/3) - 1 = -2/3
-    expected = (1/3) - 1
+    expected = (1 / 3) - 1
     assert pytest.approx(trade["pct_return"], rel=1e-6) == expected
