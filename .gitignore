@@ -8,3 +8,4 @@
 # but keep the raw/ folder itself and its .keep file
 !/data/raw/
 !/data/raw/.keep
+__pycache__/
