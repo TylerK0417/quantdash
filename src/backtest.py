@@ -29,11 +29,7 @@ def load_data(symbol: str) -> pd.DataFrame:
     return df
 
 
-def compute_signals(
-    df: pd.DataFrame,
-    short: int,
-    long: int
-) -> pd.DataFrame:
+def compute_signals(df: pd.DataFrame, short: int, long: int) -> pd.DataFrame:
     """
     Wrapper around src.signals.compute_signals that accepts
     the keywords 'short' and 'long' to match test expectations.
@@ -76,13 +72,15 @@ def backtest(df: pd.DataFrame) -> pd.DataFrame:
             exit_price = price
             exit_date = date
             pct_ret = (exit_price / entry_price) - 1
-            trades.append({
-                "entry_date":  entry_date,
-                "exit_date":   exit_date,
-                "entry_price": entry_price,
-                "exit_price":  exit_price,
-                "pct_return":  pct_ret,
-            })
+            trades.append(
+                {
+                    "entry_date": entry_date,
+                    "exit_date": exit_date,
+                    "entry_price": entry_price,
+                    "exit_price": exit_price,
+                    "pct_return": pct_ret,
+                }
+            )
             entry_price = None  # reset
 
     return pd.DataFrame(trades)
@@ -93,8 +91,8 @@ def main():
 
     p = argparse.ArgumentParser()
     p.add_argument("--symbol", required=True, help="Ticker, e.g. SPY")
-    p.add_argument("--short",  type=int, default=10, help="Short MA window")
-    p.add_argument("--long",   type=int, default=50, help="Long MA window")
+    p.add_argument("--short", type=int, default=10, help="Short MA window")
+    p.add_argument("--long", type=int, default=50, help="Long MA window")
     args = p.parse_args()
 
     # 1) Load & signal

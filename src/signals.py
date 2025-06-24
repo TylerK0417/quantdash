@@ -2,10 +2,9 @@
 
 import pandas as pd
 
+
 def compute_signals(
-    prices: pd.DataFrame,
-    short_window: int,
-    long_window: int
+    prices: pd.DataFrame, short_window: int, long_window: int
 ) -> pd.DataFrame:
     """
     Given a DataFrame of historical prices (with a 'close' column),

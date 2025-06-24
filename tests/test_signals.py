@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 from src.signals import compute_signals
 
+
 def test_signal_columns():
     """
     compute_signals should add 'ma_short', 'ma_long', and 'signal' columns.
@@ -10,6 +11,7 @@ def test_signal_columns():
     df = compute_signals(prices, short_window=2, long_window=3)
     for col in ("ma_short", "ma_long", "signal"):
         assert col in df.columns
+
 
 def test_signal_values():
     """
@@ -26,7 +28,7 @@ def test_signal_values():
 
     # Check MA values
     assert pytest.approx(df["ma_short"].iloc[2], rel=1e-6) == 2.5
-    assert pytest.approx(df["ma_long"].iloc[2],  rel=1e-6) == 2.0
+    assert pytest.approx(df["ma_long"].iloc[2], rel=1e-6) == 2.0
 
     # Check signal logic
     assert df["signal"].iloc[2] == 1
