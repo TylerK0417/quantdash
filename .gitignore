@@ -1,9 +1,10 @@
-# keep secrets out
+# keep API keys out
 .env
 
-# ignore all files under data/, but keep the folders and any .keep files
-/data/**
-!/data/
+# ignore everything directly under data/
+# (e.g. data/raw/, data/otherfolder/, data/foo.csv)
+/data/*
+
+# but keep the raw/ folder itself and its .keep file
 !/data/raw/
-!/data/**/.keep
-!/data/.keep
+!/data/raw/.keep
