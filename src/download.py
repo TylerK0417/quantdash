@@ -5,58 +5,95 @@ Usage:
     python -m src.download --symbol SPY --start 2024-01-01 --end 2024-01-31 --timeframe 1Day
 """
 
-import argparse, os
+import argparse
+import os
 from pathlib import Path
 from datetime import datetime
+
 from dotenv import load_dotenv
 from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.timeframe import TimeFrame
 from alpaca.data.requests import StockBarsRequest
+from alpaca.data.timeframe import TimeFrame
+
 import pyarrow.parquet as pq
 import pyarrow as pa
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
+def fetch(symbol: str, start: datetime, end: datetime, timeframe: str, outdir: str):
+    """
+    Fetch OHLCV bars for `symbol` from Alpaca between `start` and `end`
+    at resolution `timeframe`, then write to a parquet file under `outdir`.
+    """
+    load_dotenv()  # loads ALPACA_API_KEY / ALPACA_API_SECRET from .env
 
-def tf(code: str) -> TimeFrame:
-    mapping = {
-        "1Day": TimeFrame.Day,
-        "1Hour": TimeFrame.Hour,
-        "15Min": TimeFrame.Minute,
-    }
-    return mapping[code]
-
-
-def fetch(symbol: str, start: str, end: str, timeframe: str) -> pa.Table:
-    load_dotenv()
     client = StockHistoricalDataClient(
         api_key=os.getenv("ALPACA_API_KEY"),
         secret_key=os.getenv("ALPACA_API_SECRET"),
     )
+
     req = StockBarsRequest(
         symbol_or_symbols=symbol,
-        timeframe=tf(timeframe),
-        start=datetime.fromisoformat(start),
-        end=datetime.fromisoformat(end),
+        start=start,
+        end=end,
+        timeframe=TimeFrame[timeframe],
     )
-    df = client.get_stock_bars(req).df.reset_index()
-    return pa.Table.from_pandas(df)
+    bars = client.get_stock_bars(req).df  # pandas DataFrame
+
+    table = pa.Table.from_pandas(bars)
+    filename = (
+        Path(outdir)
+        / f"{symbol}-{timeframe}-{start:%Y%m%d}-{end:%Y%m%d}.parquet"
+    )
+    pq.write_table(table, filename)
+
+    print(f"Saved {len(bars)} bars to {filename}")
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        prog="quantdash-download",
+        description="Fetch OHLCV from Alpaca and save as Parquet."
+    )
+    p.add_argument(
+        "--symbol",
+        required=True,
+        help="Ticker symbol (e.g. AAPL)",
+    )
+    p.add_argument(
+        "--start",
+        type=lambda s: datetime.strptime(s, "%Y-%m-%d"),
+        required=True,
+        help="Start date YYYY-MM-DD",
+    )
+    p.add_argument(
+        "--end",
+        type=lambda s: datetime.strptime(s, "%Y-%m-%d"),
+        required=True,
+        help="End date YYYY-MM-DD",
+    )
+    p.add_argument(
+        "--timeframe",
+        default="1D",
+        choices=[tf.name for tf in TimeFrame],
+        help="Data resolution (e.g. 1Min, 5Min, 1H, 1D)",
+    )
+    p.add_argument(
+        "--outdir",
+        default=".",
+        help="Directory to save output Parquet files",
+    )
+    return p.parse_args()
 
 
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--symbol", required=True)
-    p.add_argument("--start", required=True)
-    p.add_argument("--end", required=True)
-    p.add_argument("--timeframe", default="1Day")
-    args = p.parse_args()
-
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    outfile = DATA_DIR / f"{args.symbol}_{args.timeframe}.parquet"
-
-    tbl = fetch(args.symbol, args.start, args.end, args.timeframe)
-    pq.write_table(tbl, outfile, compression="zstd")
-    print(f"✅  Saved {tbl.num_rows} rows → {outfile}")
+    args = parse_args()
+    fetch(
+        symbol=args.symbol,
+        start=args.start,
+        end=args.end,
+        timeframe=args.timeframe,
+        outdir=args.outdir,
+    )
 
 
 if __name__ == "__main__":
