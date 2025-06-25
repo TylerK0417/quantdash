@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 
+
 def equity_curve(trades: pd.DataFrame) -> pd.Series:
     """
     Given a DataFrame with 'exit_date' and 'pct_return',
@@ -11,6 +12,7 @@ def equity_curve(trades: pd.DataFrame) -> pd.Series:
     # cumulative product of (1 + return)
     return (1 + df["pct_return"]).cumprod()
 
+
 def max_drawdown(curve: pd.Series) -> float:
     """
     Compute the maximum drawdown of an equity curve.
@@ -19,6 +21,7 @@ def max_drawdown(curve: pd.Series) -> float:
     peak = curve.cummax()
     drawdown = (peak - curve) / peak
     return drawdown.max()
+
 
 def sharpe_ratio(curve: pd.Series, risk_free: float = 0.0) -> float:
     """
