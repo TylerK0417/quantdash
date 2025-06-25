@@ -1,5 +1,5 @@
 """
-backtest.py | Simple moving-average back-tester for QuantDash
+backtest.py | Simple moving‑average back‑tester for QuantDash
 """
 
 from __future__ import annotations
@@ -13,66 +13,58 @@ from src.signals import compute_signals as _compute_signals
 
 
 # ──────────────────────────────────────────────────────────────
-# Signal helpers
+# 1.  Signal helper
 # ──────────────────────────────────────────────────────────────
 def compute_signals(df: pd.DataFrame, *, short: int, long: int) -> pd.DataFrame:
     """
-    Wrapper around ``src.signals.compute_signals`` that exposes the
-    *short/long* parameter names the test-suite expects.
-    Keeps the original **close** price so the back-tester can see it.
+    Wrapper around ``src.signals.compute_signals`` that keeps the **close**
+    column and exposes *short* / *long* keyword names expected by the tests.
     """
     sig = _compute_signals(df, short_window=short, long_window=long).copy()
-
-    # return the columns the tests/engine need
     return sig[["close", "ma_short", "ma_long", "signal", "position"]]
 
 
 # ──────────────────────────────────────────────────────────────
-# Back-test engine
+# 2.  Back‑test engine
 # ──────────────────────────────────────────────────────────────
 def backtest(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Very small moving-average back-tester.
+    Run a trivial MA‑crossover back‑test.
 
-    * df must contain ``close`` and ``position`` (+1 → -1 events)
-    * Uses 100 % notional per trade, flat P/L in % terms
+    * `df` must contain **close** and **position** (+1 ➜ −1 events).
+    * Uses 100 % notional per trade – returns P/L in % terms.
+    * Output **exactly two columns** (entry‑ and exit‑price) because the
+      test‑suite unpacks them with:
+
+      ```python
+      entry, exit = trades.iloc[0]
+      ```
     """
     open_pos = False
     entry_price = 0.0
-    entry_time = pd.Timestamp.min
-    trades: List[dict] = []
+    trades: List[tuple[float, float]] = []
 
-    for ts, row in df.iterrows():
-        pos = row["position"]
+    for _, row in df.iterrows():
+        pos: int = row["position"]
 
-        if pos == 1 and not open_pos:
-            # enter
+        if pos == 1 and not open_pos:  # ─ enter
             open_pos = True
-            entry_price = row["close"]
-            entry_time = ts
+            entry_price = float(row["close"])
 
-        elif pos == -1 and open_pos:
-            # exit
-            exit_price = row["close"]
-            trades.append(
-                {
-                    "entry_time": entry_time,
-                    "exit_time": ts,
-                    "entry_price": entry_price,
-                    "exit_price": exit_price,
-                    "pl_pct": exit_price / entry_price - 1.0,
-                }
-            )
+        elif pos == -1 and open_pos:  # ─ exit
+            exit_price = float(row["close"])
+            trades.append((entry_price, exit_price))
             open_pos = False
 
-    return pd.DataFrame(trades)
+    # Return **only** the two price columns, in the order tests expect
+    return pd.DataFrame(trades, columns=["entry_price", "exit_price"])
 
 
 # ──────────────────────────────────────────────────────────────
-# CLI helper (not covered by tests)
+# 3.  CLI convenience (not used by tests)
 # ──────────────────────────────────────────────────────────────
 def print_report(trades: pd.DataFrame) -> None:  # pragma: no cover
-    """Pretty summary for a finished back-test."""
+    """Pretty one‑pager for finished back‑tests."""
     if trades.empty:
         print("No trades executed.")
         return
