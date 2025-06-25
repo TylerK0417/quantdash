@@ -11,8 +11,8 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 
-# Import the shared MA logic under a private name
-from src.signals import compute_signals as _compute_signals
+from src.signals import compute_signals
+from src.performance import equity_curve, max_drawdown, sharpe_ratio
 
 # Where our Parquet lives
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
@@ -29,29 +29,11 @@ def load_data(symbol: str) -> pd.DataFrame:
     return df
 
 
-def compute_signals(df: pd.DataFrame, short: int, long: int) -> pd.DataFrame:
-    """
-    Wrapper around src.signals.compute_signals that accepts
-    the keywords 'short' and 'long' to match test expectations.
-
-    Returns a DataFrame with columns:
-      - ma_short, ma_long, signal, position
-    """
-    # Delegate to the real implementation
-    sig = _compute_signals(df, short_window=short, long_window=long)
-
-    # Ensure we have 'position' too (diff of signal)
-    if "position" not in sig.columns:
-        sig["position"] = sig["signal"].diff().fillna(0).astype(int)
-
-    return sig
-
-
 def backtest(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Walk through 'position':
+    Walk through the 'position' column:
       - entry when position == 1
-      - exit  when position == -1
+      - exit when position == -1
     Record each trade's entry_date, exit_date, prices, and pct_return.
     """
     trades = []
@@ -81,13 +63,13 @@ def backtest(df: pd.DataFrame) -> pd.DataFrame:
                     "pct_return": pct_ret,
                 }
             )
-            entry_price = None  # reset
+            entry_price = None  # reset for next trade
 
     return pd.DataFrame(trades)
 
 
 def main():
-    load_dotenv()  # pick up ALPACA keys if you extend this
+    load_dotenv()  # pick up ALPACA_API_KEY if needed for extended logic
 
     p = argparse.ArgumentParser()
     p.add_argument("--symbol", required=True, help="Ticker, e.g. SPY")
@@ -113,6 +95,13 @@ def main():
     avg_ret = trades["pct_return"].mean()
     print(f"Avg return: {avg_ret:.2%}")
     print(trades.to_string(index=False))
+
+    # 5) Performance metrics
+    curve = equity_curve(trades)
+    print(f"\nPerformance metrics:")
+    print(f"  Final equity:    {curve.iloc[-1]:.2f}×")
+    print(f"  Max drawdown:    {max_drawdown(curve):.2%}")
+    print(f"  Annualized Sharpe: {sharpe_ratio(curve):.2f}\n")
 
 
 if __name__ == "__main__":
