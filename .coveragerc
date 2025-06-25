@@ -1,0 +1,12 @@
+[run]
+branch = True
+omit =
+    # helper entry-points not exercised by unit tests
+    src/paper.py
+    src/scheduler.py
+    src/download.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
