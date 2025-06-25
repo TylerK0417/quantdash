@@ -12,30 +12,30 @@ from src.performance import equity_curve, max_drawdown, sharpe_ratio
 from src.signals import compute_signals as _compute_signals
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # Signal helpers
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 def compute_signals(df: pd.DataFrame, *, short: int, long: int) -> pd.DataFrame:
     """
-    Thin wrapper around ``src.signals.compute_signals`` that matches the
-    *short/long* keyword names used in the test-suite.
+    Wrapper around ``src.signals.compute_signals`` that exposes the
+    *short/long* parameter names the test-suite expects.
+    Keeps the original **close** price so the back-tester can see it.
     """
     sig = _compute_signals(df, short_window=short, long_window=long).copy()
-    # the tests only check these four columns
-    return sig[["ma_short", "ma_long", "signal", "position"]]
+
+    # return the columns the tests/engine need
+    return sig[["close", "ma_short", "ma_long", "signal", "position"]]
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # Back-test engine
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 def backtest(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Toy back-tester:
+    Very small moving-average back-tester.
 
-    • *df* must contain ``timestamp`` index, ``close`` price,
-      and a **position** column that switches +1 → -1.
-    • Uses **100 % notional** per position (no sizing logic).
-    • Returns a DataFrame of completed trades.
+    * df must contain ``close`` and ``position`` (+1 → -1 events)
+    * Uses 100 % notional per trade, flat P/L in % terms
     """
     open_pos = False
     entry_price = 0.0
@@ -45,11 +45,14 @@ def backtest(df: pd.DataFrame) -> pd.DataFrame:
     for ts, row in df.iterrows():
         pos = row["position"]
 
-        if pos == 1 and not open_pos:  # enter long
+        if pos == 1 and not open_pos:
+            # enter
             open_pos = True
             entry_price = row["close"]
             entry_time = ts
-        elif pos == -1 and open_pos:  # exit
+
+        elif pos == -1 and open_pos:
+            # exit
             exit_price = row["close"]
             trades.append(
                 {
@@ -65,10 +68,11 @@ def backtest(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(trades)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Convenience CLI report
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
+# CLI helper (not covered by tests)
+# ──────────────────────────────────────────────────────────────
 def print_report(trades: pd.DataFrame) -> None:  # pragma: no cover
+    """Pretty summary for a finished back-test."""
     if trades.empty:
         print("No trades executed.")
         return
