@@ -2,40 +2,49 @@ name: CI
 
 on:
   push:
+    branches: [main, feat/*, fix/*, chore/*]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
-    # expose your Alpaca keys to the runner
-    env:
-      ALPACA_API_KEY:    ${{ secrets.ALPACA_API_KEY }}
-      ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+    strategy:
+      matrix:
+        python-version: ["3.11"]
 
     steps:
+      # 1 — Checkout the repo
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
+      # 2 — Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
+          cache: pip
 
+      # 3 — Install project (+ dev extras) in *editable* mode
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install \
-            black \
-            pytest \
-            alpaca-py \
-            python-dotenv \
-            pyarrow
+          pip install -e ".[dev]"
 
-      - name: Run black (check only)
-        run: |
-          black --check .
+      # 4 — Static analysis
+      - name: Ruff (lint)
+        run: ruff .
 
+      - name: Black (check only)
+        run: black --check .
+
+      # 5 — Run tests with coverage (fails < 95 %)
       - name: Run tests
         run: |
-          pytest -q
+          pytest -q --cov=src --cov-report=xml
+          coverage report --fail-under=95
