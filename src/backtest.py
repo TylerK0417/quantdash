@@ -8,6 +8,7 @@ Usage:
 import os
 import argparse
 from pathlib import Path
+
 import pandas as pd
 from dotenv import load_dotenv
 
@@ -25,8 +26,7 @@ def load_data(symbol: str) -> pd.DataFrame:
     """
     path = DATA_DIR / f"{symbol}_1Day.parquet"
     df = pd.read_parquet(path)
-    df = df.set_index("timestamp").sort_index()
-    return df
+    return df.set_index("timestamp").sort_index()
 
 
 def backtest(df: pd.DataFrame) -> pd.DataFrame:
@@ -82,7 +82,7 @@ def main():
     sig = compute_signals(df, args.short, args.long)
     trades = backtest(sig)
 
-    # 2) Summary
+    # 2) Summary header
     print(f"\n=== {args.symbol} MA{args.short}/{args.long} Crossover ===")
     print(f"Total trades: {len(trades)}")
 
@@ -91,17 +91,19 @@ def main():
         print("⚠️  No trades generated — try a shorter window or more history")
         return
 
-    # 4) Otherwise, show stats & table
+    # 4) Stats & table
     avg_ret = trades["pct_return"].mean()
     print(f"Avg return: {avg_ret:.2%}")
     print(trades.to_string(index=False))
 
-    # 5) Performance metrics
-    curve = equity_curve(trades)
-    print(f"\nPerformance metrics:")
-    print(f"  Final equity:    {curve.iloc[-1]:.2f}×")
-    print(f"  Max drawdown:    {max_drawdown(curve):.2%}")
-    print(f"  Annualized Sharpe: {sharpe_ratio(curve):.2f}\n")
+    # 5) Performance summary
+    eq = equity_curve(trades["pct_return"])
+    dd = max_drawdown(eq)
+    sr = sharpe_ratio(trades["pct_return"])
+
+    print(f"\nEquity curve final value: {eq.iloc[-1]:.2f}")
+    print(f"Max drawdown: {dd:.2%}")
+    print(f"Sharpe ratio: {sr:.2f}")
 
 
 if __name__ == "__main__":
