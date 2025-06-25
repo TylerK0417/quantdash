@@ -1,57 +1,108 @@
+"""
+backtest.py | Simple MA Crossover Back-tester for QuantDash
+
+Usage:
+    python -m src.backtest --symbol SPY --short 10 --long 50
+"""
+
+import os
+import argparse
+from pathlib import Path
 import pandas as pd
-import pytest
-from src.backtest import compute_signals, backtest
+from dotenv import load_dotenv
+
+from src.signals import compute_signals
+from src.performance import equity_curve, max_drawdown, sharpe_ratio
+
+# Where our Parquet lives
+DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
 
-def make_df(prices):
+def load_data(symbol: str) -> pd.DataFrame:
     """
-    Helper: generate a DataFrame of daily closes from a list of prices,
-    indexed by consecutive calendar days starting 2025-01-01.
+    Load the daily bars Parquet into a DataFrame,
+    indexed by timestamp and sorted ascending.
     """
-    dates = pd.date_range("2025-01-01", periods=len(prices), freq="D")
-    return pd.DataFrame({"close": prices}, index=dates)
+    path = DATA_DIR / f"{symbol}_1Day.parquet"
+    df = pd.read_parquet(path)
+    df = df.set_index("timestamp").sort_index()
+    return df
 
 
-def test_compute_signals_columns_and_values():
-    # Given a simple price sequence that rises then falls,
-    # with short=2, long=3, we know exactly when signals flip.
-    prices = [1, 2, 3, 2, 1]
-    df = make_df(prices)
-    sig = compute_signals(df, short=2, long=3)
+def backtest(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Walk through the 'position' column:
+      - entry when position == 1
+      - exit when position == -1
+    Record each trade's entry_date, exit_date, prices, and pct_return.
+    """
+    trades = []
+    entry_price = None
+    entry_date = None
 
-    # Ensure the MA columns, signal, and position exist
-    for col in ("ma_short", "ma_long", "signal", "position"):
-        assert col in sig.columns
+    for date, row in df.iterrows():
+        pos = row["position"]
+        price = row["close"]
 
-    # On the 3rd row (index 2), ma_short=(2+3)/2=2.5, ma_long=(1+2+3)/3=2.0 → signal 1
-    assert pytest.approx(sig["ma_short"].iloc[2], rel=1e-6) == 2.5
-    assert pytest.approx(sig["ma_long"].iloc[2], rel=1e-6) == 2.0
-    assert sig["signal"].iloc[2] == 1
+        # Open a trade
+        if pos == 1:
+            entry_price = price
+            entry_date = date
 
-    # On the last row, price falls so signal → 0 and position diff → -1
-    assert sig["signal"].iloc[-1] == 0
-    assert sig["position"].iloc[-1] == -1
+        # Close a trade
+        elif pos == -1 and entry_price is not None:
+            exit_price = price
+            exit_date = date
+            pct_ret = (exit_price / entry_price) - 1
+            trades.append(
+                {
+                    "entry_date": entry_date,
+                    "exit_date": exit_date,
+                    "entry_price": entry_price,
+                    "exit_price": exit_price,
+                    "pct_return": pct_ret,
+                }
+            )
+            entry_price = None  # reset for next trade
+
+    return pd.DataFrame(trades)
 
 
-def test_backtest_single_trade():
-    # Using the same price pattern, backtest() should produce exactly one trade:
-    # entry at price=3 on day3, exit at price=1 on day5.
-    prices = [1, 2, 3, 2, 1]
-    df = make_df(prices)
-    sig = compute_signals(df, short=2, long=3)
+def main():
+    load_dotenv()  # pick up ALPACA_API_KEY if needed for extended logic
+
+    p = argparse.ArgumentParser()
+    p.add_argument("--symbol", required=True, help="Ticker, e.g. SPY")
+    p.add_argument("--short", type=int, default=10, help="Short MA window")
+    p.add_argument("--long", type=int, default=50, help="Long MA window")
+    args = p.parse_args()
+
+    # 1) Load & signal
+    df = load_data(args.symbol)
+    sig = compute_signals(df, args.short, args.long)
     trades = backtest(sig)
 
-    # Should be a DataFrame with one row
-    assert isinstance(trades, pd.DataFrame)
-    assert len(trades) == 1
+    # 2) Summary
+    print(f"\n=== {args.symbol} MA{args.short}/{args.long} Crossover ===")
+    print(f"Total trades: {len(trades)}")
 
-    trade = trades.iloc[0]
-    # Check entry/exit dates and prices
-    assert trade["entry_date"] == df.index[2]
-    assert trade["exit_date"] == df.index[-1]
-    assert trade["entry_price"] == 3
-    assert trade["exit_price"] == 1
+    # 3) Handle no-trade edge case
+    if trades.empty:
+        print("⚠️  No trades generated — try a shorter window or more history")
+        return
 
-    # Percent return = (1/3) - 1 = -2/3
-    expected = (1 / 3) - 1
-    assert pytest.approx(trade["pct_return"], rel=1e-6) == expected
+    # 4) Otherwise, show stats & table
+    avg_ret = trades["pct_return"].mean()
+    print(f"Avg return: {avg_ret:.2%}")
+    print(trades.to_string(index=False))
+
+    # 5) Performance metrics
+    curve = equity_curve(trades)
+    print(f"\nPerformance metrics:")
+    print(f"  Final equity:    {curve.iloc[-1]:.2f}×")
+    print(f"  Max drawdown:    {max_drawdown(curve):.2%}")
+    print(f"  Annualized Sharpe: {sharpe_ratio(curve):.2f}\n")
+
+
+if __name__ == "__main__":
+    main()

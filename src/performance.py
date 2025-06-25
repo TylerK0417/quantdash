@@ -1,37 +1,31 @@
-# src/performance.py
-
 import pandas as pd
 import numpy as np
 
-def equity_curve(returns: pd.Series, initial_capital: float = 1.0) -> pd.Series:
+def equity_curve(trades: pd.DataFrame) -> pd.Series:
     """
-    Given a pandas Series of period returns (i.e. 0.02 = +2%),
-    compute and return the cumulative equity curve, starting at initial_capital.
+    Given a DataFrame with 'exit_date' and 'pct_return',
+    return a time‐indexed equity curve (cumulative returns).
     """
-    return (1 + returns).cumprod() * initial_capital
+    # Sort trades by exit_date
+    df = trades.sort_values("exit_date").set_index("exit_date")
+    # cumulative product of (1 + return)
+    return (1 + df["pct_return"]).cumprod()
 
+def max_drawdown(curve: pd.Series) -> float:
+    """
+    Compute the maximum drawdown of an equity curve.
+    Returns the largest peak-to-trough decline (positive number).
+    """
+    peak = curve.cummax()
+    drawdown = (peak - curve) / peak
+    return drawdown.max()
 
-def max_drawdown(equity: pd.Series) -> float:
+def sharpe_ratio(curve: pd.Series, risk_free: float = 0.0) -> float:
     """
-    Given a pandas Series representing an equity curve (e.g. from equity_curve()),
-    compute the maximum drawdown (in decimal form, e.g. -0.12 for a 12% drop).
+    Annualized Sharpe ratio assuming daily returns in equity curve series.
+    risk_free is the annual risk‐free rate (e.g. 0.01 for 1%).
     """
-    running_max = equity.cummax()
-    drawdowns = equity / running_max - 1
-    return drawdowns.min()
-
-
-def sharpe_ratio(
-    returns: pd.Series,
-    risk_free_rate: float = 0.0,
-    trading_days: int = 252
-) -> float:
-    """
-    Compute the annualized Sharpe ratio of a returns series.
-    
-    Uses pandas.Series.std() (ddof=1) so that a constant series yields NaN.
-    Scales by sqrt(trading_days). Defaults to 0% risk-free rate.
-    """
-    # subtract daily risk-free
-    excess = returns - (risk_free_rate / trading_days)
-    return (excess.mean() / excess.std()) * np.sqrt(trading_days)
+    # daily returns
+    rets = curve.pct_change().dropna()
+    excess = rets - (risk_free / 252)
+    return (excess.mean() / excess.std()) * np.sqrt(252)
