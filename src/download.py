@@ -1,30 +1,67 @@
 """
 download.py | Historical OHLCV fetcher for QuantDash
 
-Usage:
-    python -m src.download --symbol SPY --start 2024-01-01 --end 2024-01-31 --timeframe 1Day
+Usage
+-----
+python -m src.download \
+    --symbol SPY --start 2024-01-01 --end 2024-01-31 --timeframe 1Day
 """
+
+from __future__ import annotations
 
 import argparse
 import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-from dotenv import load_dotenv
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+from dotenv import load_dotenv
 
-import pyarrow.parquet as pq
-import pyarrow as pa
+# ──────────────────────────────────────────────────────────────────────────────
+# Globals
+# ──────────────────────────────────────────────────────────────────────────────
+
+DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
 
-def fetch(symbol: str, start: datetime, end: datetime, timeframe: str, outdir: str):
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+def tf(code: str) -> TimeFrame:
+    """Return the Alpaca ``TimeFrame`` enum for *code* (e.g. ``"1Day"``)."""
+    mapping = {
+        "1Day": TimeFrame.Day,
+        "1Hour": TimeFrame.Hour,
+        "15Min": TimeFrame.Minute,
+    }
+    try:
+        return mapping[code]
+    except KeyError as exc:  # pragma: no cover
+        raise ValueError(f"Unsupported timeframe: {code!r}") from exc
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Public API
+# ──────────────────────────────────────────────────────────────────────────────
+def fetch(symbol: str, start: str, end: str, timeframe: str = "1Day") -> pa.Table:
     """
-    Fetch OHLCV bars for `symbol` from Alpaca between `start` and `end`
-    at resolution `timeframe`, then write to a parquet file under `outdir`.
+    Download bars from Alpaca and return a **PyArrow Table**.
+
+    Parameters
+    ----------
+    symbol:
+        Ticker (e.g. ``"SPY"``).
+    start, end:
+        ISO-8601 date strings, inclusive.
+    timeframe:
+        One of ``"1Day" | "1Hour" | "15Min"``.
     """
-    load_dotenv()  # loads ALPACA_API_KEY / ALPACA_API_SECRET from .env
+    load_dotenv()
 
     client = StockHistoricalDataClient(
         api_key=os.getenv("ALPACA_API_KEY"),
@@ -33,67 +70,42 @@ def fetch(symbol: str, start: datetime, end: datetime, timeframe: str, outdir: s
 
     req = StockBarsRequest(
         symbol_or_symbols=symbol,
-        start=start,
-        end=end,
-        timeframe=TimeFrame[timeframe],
+        timeframe=tf(timeframe),
+        start=datetime.fromisoformat(start),
+        end=datetime.fromisoformat(end),
     )
-    bars = client.get_stock_bars(req).df  # pandas DataFrame
 
-    table = pa.Table.from_pandas(bars)
-    filename = (
-        Path(outdir)
-        / f"{symbol}-{timeframe}-{start:%Y%m%d}-{end:%Y%m%d}.parquet"
-    )
-    pq.write_table(table, filename)
-
-    print(f"Saved {len(bars)} bars to {filename}")
+    df = client.get_stock_bars(req).df.reset_index()
+    return pa.Table.from_pandas(df)
 
 
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        prog="quantdash-download",
-        description="Fetch OHLCV from Alpaca and save as Parquet."
-    )
-    p.add_argument(
-        "--symbol",
-        required=True,
-        help="Ticker symbol (e.g. AAPL)",
-    )
-    p.add_argument(
-        "--start",
-        type=lambda s: datetime.strptime(s, "%Y-%m-%d"),
-        required=True,
-        help="Start date YYYY-MM-DD",
-    )
-    p.add_argument(
-        "--end",
-        type=lambda s: datetime.strptime(s, "%Y-%m-%d"),
-        required=True,
-        help="End date YYYY-MM-DD",
-    )
-    p.add_argument(
-        "--timeframe",
-        default="1D",
-        choices=[tf.name for tf in TimeFrame],
-        help="Data resolution (e.g. 1Min, 5Min, 1H, 1D)",
-    )
-    p.add_argument(
-        "--outdir",
-        default=".",
-        help="Directory to save output Parquet files",
-    )
-    return p.parse_args()
+def load_data(symbol: str) -> pd.DataFrame:
+    """
+    Return the cached daily Parquet for *symbol* as a DataFrame,
+    indexed and sorted by ``timestamp``.
+    """
+    path = DATA_DIR / f"{symbol}_1Day.parquet"
+    df = pd.read_parquet(path)
+    return df.set_index("timestamp").sort_index()
 
 
-def main():
-    args = parse_args()
-    fetch(
-        symbol=args.symbol,
-        start=args.start,
-        end=args.end,
-        timeframe=args.timeframe,
-        outdir=args.outdir,
-    )
+# ──────────────────────────────────────────────────────────────────────────────
+# CLI
+# ──────────────────────────────────────────────────────────────────────────────
+def main() -> None:  # pragma: no cover
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--symbol", required=True)
+    parser.add_argument("--start", required=True)
+    parser.add_argument("--end", required=True)
+    parser.add_argument("--timeframe", default="1Day")
+    args = parser.parse_args()
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    outfile = DATA_DIR / f"{args.symbol}_{args.timeframe}.parquet"
+
+    tbl = fetch(args.symbol, args.start, args.end, args.timeframe)
+    pq.write_table(tbl, outfile, compression="zstd")
+    print(f"✅  Saved {tbl.num_rows} rows → {outfile}")
 
 
 if __name__ == "__main__":
