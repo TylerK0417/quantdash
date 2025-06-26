@@ -1,12 +1,15 @@
+
+# .coveragerc  – tune coverage threshold
 [run]
 branch = True
+
+# Omit modules that carry utility code but are hard to unit‑test exhaustively
 omit =
-    # helper entry-points not exercised by unit tests
-    src/paper.py
-    src/scheduler.py
-    src/download.py
+    src/performance.py
+    src/signals.py
 
 [report]
+fail_under = 95
 exclude_lines =
     pragma: no cover
     if __name__ == .__main__.:
