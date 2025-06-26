@@ -1,34 +1,71 @@
-import pandas as pd
+# src/performance.py
+"""
+Performance utilities:
+- equity_curve : cumulative growth of $1
+- max_drawdown : worst peak‑to‑trough decline
+- sharpe_ratio : annualised risk‑adjusted return
+"""
+
+from __future__ import annotations
+
 import numpy as np
+import pandas as pd
+
+EPS = 1e-10  # numerical zero
 
 
+# ----------------------------------------------------------------------
+# Equity curve & draw‑down
+# ----------------------------------------------------------------------
 def equity_curve(trades: pd.DataFrame) -> pd.Series:
     """
-    Given a DataFrame with 'exit_date' and 'pct_return',
-    return a time‐indexed equity curve (cumulative returns).
+    Build a $‑1 equity curve from a trades DataFrame that contains
+
+        exit_date   datetime64[ns]
+        pct_return  float (decimal, e.g. +0.05)
+
+    The index of the returned Series is the exit_date.
     """
-    # Sort trades by exit_date
-    df = trades.sort_values("exit_date").set_index("exit_date")
-    # cumulative product of (1 + return)
-    return (1 + df["pct_return"]).cumprod()
+    curve = (1 + trades["pct_return"]).cumprod()
+    curve.index = pd.to_datetime(trades["exit_date"])
+    return curve
 
 
 def max_drawdown(curve: pd.Series) -> float:
     """
-    Compute the maximum drawdown of an equity curve.
-    Returns the largest peak-to-trough decline (positive number).
+    Return *positive* fractional draw‑down. 0.25 ⇒ ‑25 %.
     """
     peak = curve.cummax()
-    drawdown = (peak - curve) / peak
-    return drawdown.max()
+    draw = (peak - curve) / peak
+    return draw.max()
 
 
-def sharpe_ratio(curve: pd.Series, risk_free: float = 0.0) -> float:
+# ----------------------------------------------------------------------
+# Sharpe ratio
+# ----------------------------------------------------------------------
+def sharpe_ratio(curve: pd.Series, *, risk_free: float = 0.0) -> float:
     """
-    Annualized Sharpe ratio assuming daily returns in equity curve series.
-    risk_free is the annual risk‐free rate (e.g. 0.01 for 1%).
+    Annualised Sharpe ratio of an equity curve.
+
+    Special cases
+    -------------
+    • Flat curve (all returns 0)              → NaN
+    • Constant non‑zero daily returns         → ±∞
     """
-    # daily returns
-    rets = curve.pct_change().dropna()
-    excess = rets - (risk_free / 252)
-    return (excess.mean() / excess.std()) * np.sqrt(252)
+    # daily % returns; first value becomes 0 after fillna
+    daily = curve.pct_change().fillna(0.0)
+    excess = daily - (risk_free / 252.0)
+
+    # Detect “constant” returns (ignoring the first 0)
+    if excess.iloc[1:].abs().nunique() <= 1:  # all identical
+        mu = excess.mean()
+        if abs(mu) < EPS:  # exactly flat → undefined
+            return float("nan")
+        return np.inf * np.sign(mu)  # constant +ve / ‑ve
+
+    # Standard Sharpe
+    sigma = excess.std()
+    if sigma < EPS:
+        return float("nan")  # should only happen for flat
+
+    return (excess.mean() / sigma) * np.sqrt(252)
