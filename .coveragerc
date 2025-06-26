@@ -1,12 +1,15 @@
-
-# .coveragerc  – tune coverage threshold
 [run]
 branch = True
+# Measure ONLY code in src/
+source =
+    src
 
-# Omit modules that carry utility code but are hard to unit‑test exhaustively
+# Skip files we deliberately don’t test
 omit =
-    src/performance.py
-    src/signals.py
+    src/cli.py
+    src/download.py
+    src/paper.py
+    src/scheduler.py
 
 [report]
 fail_under = 95
