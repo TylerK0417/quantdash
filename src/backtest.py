@@ -1,79 +1,85 @@
+# src/backtest.py
+
 """
-backtest.py | Moving‑average crossover back‑tester for QuantDash
+backtest.py | Simple MA Crossover Back-tester for QuantDash
+
+Usage:
+    qdash backtest --symbol SPY --short 10 --long 50
 """
 
-from __future__ import annotations
-
-from typing import Dict, List
-
+import argparse
 import pandas as pd
+from src.download import load_data
+from src.signals import compute_signals
 
-from src.performance import equity_curve, max_drawdown, sharpe_ratio
-from src.signals import compute_signals as _compute_signals
-
-
-# ──────────────────────────────────────────────────────────────
-# 1.  Signal helper
-# ──────────────────────────────────────────────────────────────
-def compute_signals(df: pd.DataFrame, *, short: int, long: int) -> pd.DataFrame:
-    """Expose *short* / *long* names and keep ``close`` for the back‑test."""
-    sig = _compute_signals(df, short_window=short, long_window=long).copy()
-    return sig[["close", "ma_short", "ma_long", "signal", "position"]]
-
-
-# ──────────────────────────────────────────────────────────────
-# 2.  Back‑test engine
-# ──────────────────────────────────────────────────────────────
 def backtest(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Run a toy MA‑crossover back‑test.
-
-    The test‑suite unpacks the **first row** with
-
-    ```python
-    entry, exit = trades.iloc[0]
-    assert entry["entry_price"] == 3
-    ```
-
-    so every row must hold two *mapping‑like* objects that can be indexed.
+    Walk through the 'position' column:
+      - entry when position == 1
+      - exit when position == -1
+    Record each trade's entry_date, exit_date, prices, and pct_return.
     """
-    trades: List[Dict[str, Dict[str, float]]] = []
+    trades = []
+    entry_price = None
+    entry_date = None
 
-    in_market = False
-    entry_price: float = 0.0
+    for date, row in df.iterrows():
+        pos = row["position"]
+        price = row["close"]
 
-    for _, row in df.iterrows():
-        pos: int = row["position"]
+        # Open a trade
+        if pos == 1 and entry_price is None:
+            entry_price = price
+            entry_date = date
 
-        # ─── Open a trade ────────────────────────────────────────────────
-        if pos == 1 and not in_market:
-            in_market = True
-            entry_price = float(row["close"])
+        # Close a trade
+        elif pos == -1 and entry_price is not None:
+            exit_price = price
+            exit_date = date
+            pct_ret = (exit_price / entry_price) - 1
+            trades.append({
+                "entry_date":  entry_date,
+                "exit_date":   exit_date,
+                "entry_price": entry_price,
+                "exit_price":  exit_price,
+                "pct_return":  pct_ret,
+            })
+            entry_price = None  # reset for next trade
 
-        # ─── Close the trade ─────────────────────────────────────────────
-        elif pos == -1 and in_market:
-            exit_price = float(row["close"])
-            trades.append(
-                {
-                    "entry": {"entry_price": entry_price},
-                    "exit": {"exit_price": exit_price},
-                }
-            )
-            in_market = False
+    return pd.DataFrame(trades)
 
-    return pd.DataFrame(trades, columns=["entry", "exit"])
+def main(args=None):
+    """
+    CLI entrypoint for backtesting.
+    Accepts an optional list of strings `args` for testing/CLI wrappers.
+    """
+    p = argparse.ArgumentParser()
+    p.add_argument("--symbol", required=True, help="Ticker, e.g. SPY")
+    p.add_argument("--short",  type=int, default=10, help="Short MA window")
+    p.add_argument("--long",   type=int, default=50, help="Long MA window")
+    ns = p.parse_args(args)
 
+    # 1) Load & signal
+    df = load_data(ns.symbol)
+    sig = compute_signals(df, ns.short, ns.long)
 
-# ──────────────────────────────────────────────────────────────
-# 3.  CLI helper (not used in the tests)
-# ──────────────────────────────────────────────────────────────
-def print_report(trades: pd.DataFrame) -> None:  # pragma: no cover
+    # 2) Run backtest
+    trades = backtest(sig)
+
+    # 3) Summary
+    print(f"\n=== {ns.symbol} MA{ns.short}/{ns.long} Crossover ===")
+    print(f"Total trades: {len(trades)}")
+
+    # 4) No-trade edge case
     if trades.empty:
-        print("No trades executed.")
+        print("⚠️  No trades generated — try a shorter window or more history")
         return
 
-    curve = equity_curve(trades)
-    print("\nPerformance metrics:")
-    print(f"  Final equity : {curve.iloc[-1]:.2f}x")
-    print(f"  Max drawdown : {max_drawdown(curve):.2%}")
-    print(f"  Sharpe ratio : {sharpe_ratio(curve):.2f}")
+    # 5) Stats & table
+    avg_ret = trades["pct_return"].mean()
+    print(f"Avg return: {avg_ret:.2%}")
+    print(trades.to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()

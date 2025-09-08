@@ -1,0 +1,12 @@
+alpaca-py>=0.40.0
+python-dotenv>=1.1
+pandas>=2.3
+numpy>=2.3
+pyarrow>=20.0
+click>=8.2
+
+[dev]
+pytest
+pytest-cov
+black
+ruff

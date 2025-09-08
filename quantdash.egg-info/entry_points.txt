@@ -1,0 +1,2 @@
+[console_scripts]
+qdash = src.cli:cli

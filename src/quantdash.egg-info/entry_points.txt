@@ -1,0 +1,2 @@
+[console_scripts]
+qdash = quantdash.cli:cli

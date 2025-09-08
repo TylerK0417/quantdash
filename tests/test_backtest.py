@@ -43,6 +43,6 @@ def test_backtest_single_trade():
     trades = backtest(sig)
 
     assert len(trades) == 1
-    entry, exit = trades.iloc[0]
-    assert entry["entry_price"] == 3
-    assert exit["exit_price"] == 1
+    trade = trades.iloc[0]
+    assert trade["entry_price"] == 3
+    assert trade["exit_price"] == 1

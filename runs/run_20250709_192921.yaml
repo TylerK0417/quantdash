@@ -1,0 +1,16 @@
+atr_mult:
+  size: 0.7
+  stop: 1.0
+engine: ma
+interval: 10
+long: 9
+risk_pct: 0.01
+short: 3
+symbols:
+- SPY
+- AAPL
+- NVDA
+- GOOGL
+- JPM
+- BTCUSD
+timeframe: 1Min

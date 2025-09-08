@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: quantdash
+Version: 0.1.0
+Summary: Alpaca-powered trading bot / research toolkit
+License: BSD-3-Clause
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: alpaca-py>=0.40.0
+Requires-Dist: python-dotenv>=1.1
+Requires-Dist: pandas>=2.3
+Requires-Dist: numpy>=2.3
+Requires-Dist: pyarrow>=20.0
+Requires-Dist: click>=8.2
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: ruff; extra == "dev"

@@ -1,21 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "quantdash"
 version = "0.1.0"
-description = "Alpaca-powered trading bot / research toolkit"
-requires-python = ">=3.10"
+description = "QuantDash: a simple quant toolkit"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+  { name="Your Name", email="you@example.com" }
+]
 dependencies = [
-    "alpaca-py>=0.40.0",
-    "python-dotenv>=1.1",
-    "pandas>=2.3",
-    "numpy>=2.3",
-    "pyarrow>=20.0",
-    "click>=8.2",
+  "alpaca-py>=0.40.0",
+  "python-dotenv>=1.1",
+  "pandas>=2.3",
+  "numpy>=2.3",
+  "pyarrow>=20.0",
+  "click>=8.2"
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "black", "ruff"]
+dev = [
+  "pytest",
+  "pytest-cov",
+  "black",
+  "ruff"
+]
 
-[project.scripts]             # this wires up CLI entry points
-qdash-download = "src.download:cli"
-qdash-backtest = "src.backtest:cli"
-qdash-paper    = "src.paper:cli"
+[project.scripts]
+qdash = "src.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*"]

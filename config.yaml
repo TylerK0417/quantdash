@@ -1,0 +1,21 @@
+symbols:  [SPY, 
+          AAPL,
+          NVDA,
+          GOOGL,
+          JPM,
+          BTC/USD
+          
+          ]
+timeframe: 1Min
+interval: 5
+short: 1
+long: 2
+risk_pct: 0.01
+trail_pct : 0.002
+thresh_pct: 0.02
+atr_mult:
+  size: 0.5
+  stop: 1.0
+
+limit_timeout: 30      # seconds to wait for a LIMIT to fill
+cancel_timeout: 10      # seconds to wait after cancel_order
