@@ -1,4 +1,5 @@
 # src/plots.py
+# 123
 from pathlib import Path
 import matplotlib.pyplot as plt
 
@@ -20,3 +21,4 @@ def save_equity_curve(history, stamp: str) -> None:
     outfile = REPORTS / f"equity_{stamp}.png"
     plt.savefig(outfile, dpi=120, bbox_inches="tight")
     plt.close()
+
