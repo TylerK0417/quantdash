@@ -396,6 +396,19 @@ class Trader:
             self._open_cache.discard((sym_broker, side.name.lower()))
             return limit_resp
 
+        # *** Check if market is open before submitting MARKET fallback ***
+        # For equities (non-crypto), prevent queued DAY orders when market is closed
+        if not is_crypto(symbol):
+            try:
+                clock = self.client.get_clock()
+                if not clock.is_open:
+                    print(f"⚠️  Market closed – skipping MARKET fallback for {symbol}")
+                    self._open_cache.discard((sym_broker, side.name.lower()))
+                    return limit_resp
+            except Exception as exc:
+                # If we can't get market status, log warning but proceed
+                print(f"⚠️  Could not check market status ({exc}); proceeding with MARKET order")
+
         print(f"⏳  Limit timeout ({filled_qty}/{qty}) → MARKET {remaining}")
         mkt_req, _ = self._build_entry_request(
             "market", side, sym_broker, remaining, price, atr_val
@@ -423,7 +436,7 @@ class Trader:
         Query Alpaca for *open* orders, update _open_cache and portfolio so the
         bot won't place duplicates right after a restart.
         """
-        if self.paper:                      # sim-only mode → nothing to reconcile
+        if self.client is None:             # sim-only mode → nothing to reconcile
             return
 
         try:
@@ -488,7 +501,7 @@ class Trader:
                     logging.warning(f"Order-cache fetch failed ({exc})")
                     self._open_cache = set()
 
-            if any(o_sym == norm_sym(symbol) for (o_sym, _) in self._open_cache):
+            if (norm_sym(symbol), side_txt) in self._open_cache:
                 logging.info(f"{symbol}: open {side_txt} order already exists – skipping")
                 return
         # ──────────────────────────────────────────────────────────────────
