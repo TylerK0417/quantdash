@@ -6,10 +6,17 @@ for the unfilled remainder – never over-buying or duplicating size.
 """
 
 import types
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import pandas as pd
+import pytest
 
 from src.trader import Trader, OrderSide
+
+
+@pytest.fixture(autouse=True)
+def fake_env(monkeypatch):
+    monkeypatch.setenv("ALPACA_API_KEY", "key")
+    monkeypatch.setenv("ALPACA_API_SECRET", "secret")
 
 
 # ---------------------------------------------------------------------- #
@@ -41,9 +48,28 @@ class StubClient(MagicMock):
 # ---------------------------------------------------------------------- #
 # The actual test
 # ---------------------------------------------------------------------- #
-def test_limit_timeout_then_market():
+@patch('time.sleep')  # Mock sleep to make test fast
+@patch('time.monotonic')  # Mock monotonic to control timeouts
+def test_limit_timeout_then_market(mock_monotonic, mock_sleep):
     # ---- 1. Build stubbed Trader ------------------------------------
- 
+    # Control time progression to match test expectations:
+    # - limit_timeout = 1.0, need 2 polls → times 0, 0, 0.4, 0.8, 1.2 (exit)
+    # - cancel_timeout = 0.5, need 2 polls → times 1.2, 1.2, 1.35, 1.45, 1.8 (exit)
+    time_seq = [
+        0,    # deadline calc for limit wait
+        0,    # first poll check
+        0.4,  # second poll check
+        0.8,  # third poll check
+        1.2,  # timeout - exit limit wait
+        1.2,  # deadline calc for cancel wait
+        1.2,  # first poll check
+        1.35, # second poll check
+        1.45, # third poll check
+        1.8,  # timeout - exit cancel wait
+        2.0,  # market fallback time
+    ]
+    mock_monotonic.side_effect = time_seq
+
     mock_client = StubClient()
     trader = Trader(
         paper=False,           # pretend live mode
@@ -72,6 +98,9 @@ def test_limit_timeout_then_market():
 
     # cancel_order returns a response with .status_code == 204
     mock_client.cancel_order.return_value = types.SimpleNamespace(status_code=204)
+
+    # get_clock returns market is open (so MARKET fallback proceeds)
+    mock_client.get_clock.return_value = types.SimpleNamespace(is_open=True)
 
     # ---- 3. Call the method under test ------------------------------
     trader._submit(OrderSide.BUY, "AAPL", qty=5, price=100.0, atr_val=1.0)
